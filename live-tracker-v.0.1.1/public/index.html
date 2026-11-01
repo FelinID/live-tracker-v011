@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Tracking V.0.1.1</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background: #eef2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .card { background: #fff; width: 100%; max-width: 420px; border-radius: 12px; padding: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
+        
+        #permission-screen { text-align: center; }
+        .icon-box { font-size: 40px; margin-bottom: 10px; }
+        #auth-screen { display: none; }
+        
+        .tabs { display: flex; border-bottom: 2px solid #eee; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 10px; background: none; border: none; font-size: 16px; font-weight: bold; color: #888; cursor: pointer; }
+        .tab-btn.active { color: #007bff; border-bottom: 3px solid #007bff; }
+        
+        .form-group { margin-bottom: 14px; }
+        label { display: block; font-size: 13px; color: #555; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+        .date-row { display: flex; gap: 8px; }
+        .btn-submit { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        
+        .alert { padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; display: none; }
+        .alert-success { background: #d4edda; color: #155724; }
+        .alert-error { background: #f8d7da; color: #721c24; }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            50% { transform: translateX(8px); }
+            75% { transform: translateX(-8px); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes pulse-bg {
+            0% { background-color: #f8d7da; }
+            50% { background-color: #f5b7bd; }
+            100% { background-color: #f8d7da; }
+        }
+        .locked { animation: pulse-bg 2s infinite; border-left: 5px solid #721c24; padding: 15px; }
+        .shake { animation: shake 0.5s ease-in-out; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="permission-screen">
+        <div class="icon-box">📍📷</div>
+        <h2>Izin Diperlukan</h2>
+        <p>Aplikasi mewajibkan akses Kamera dan Lokasi (GPS). Anda tidak dapat melanjutkan sebelum memberikan izin.</p>
+        <button class="btn-submit" id="btn-grant-permission" onclick="requestPermissions()">Berikan Izin Akses</button>
+        <div id="permission-error" class="alert alert-error" style="margin-top:15px;"></div>
+    </div>
+
+    <div id="auth-screen">
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-login-btn" onclick="switchTab('login')">Login</button>
+            <button class="tab-btn" id="tab-register-btn" onclick="switchTab('register')">Daftar</button>
+        </div>
+        <div id="alert-box" class="alert"></div>
+
+        <form id="form-login" onsubmit="handleLogin(event)">
+            <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+            <div class="form-group"><label>Password</label><input type="password" id="login-password" required></div>
+            <button type="submit" class="btn-submit">Masuk</button>
+        </form>
+
+        <form id="form-register" style="display: none;" onsubmit="handleRegister(event)">
+            <div class="form-group"><label>Nama Lengkap</label><input type="text" id="reg-name" required></div>
+            <div class="form-group">
+                <label>Tanggal Lahir</label>
+                <div class="date-row">
+                    <input type="number" id="reg-day" min="1" max="31" required placeholder="DD">
+                    <select id="reg-month" required>
+                        <option value="">Bulan</option>
+                        <option value="Jan">Jan</option>
+                        <option value="Feb">Feb</option>
+                        <option value="Mar">Mar</option>
+                        <option value="Apr">Apr</option>
+                        <option value="Mei">Mei</option>
+                        <option value="Jun">Jun</option>
+                        <option value="Jul">Jul</option>
+                        <option value="Agu">Agu</option>
+                        <option value="Sep">Sep</option>
+                        <option value="Okt">Okt</option>
+                        <option value="Nov">Nov</option>
+                        <option value="Des">Des</option>
+                    </select>
+                    <input type="number" id="reg-year" min="1940" max="2026" required placeholder="YYYY">
+                </div>
+            </div>
+            <div class="form-group"><label>Nomor WhatsApp</label><input type="tel" id="reg-wa" required></div>
+            <div class="form-group"><label>Email</label><input type="email" id="reg-email" required></div>
+            <div class="form-group"><label>Password</label><input type="password" id="reg-password" required></div>
+            <button type="submit" class="btn-submit">Daftar</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    let permissionCheckInterval = null;
+
+    async function requestPermissions() {
+        const btn = document.getElementById('btn-grant-permission');
+        btn.innerText = "Memeriksa izin...";
+        btn.disabled = true;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach(t => t.stop());
+
+            navigator.geolocation.getCurrentPosition(
+                () => {
+                    if (permissionCheckInterval) clearInterval(permissionCheckInterval);
+                    document.getElementById('permission-screen').style.display = 'none';
+                    document.getElementById('auth-screen').style.display = 'block';
+                },
+                () => triggerConstantAlert("GPS diblokir."),
+                { enableHighAccuracy: true }
+            );
+        } catch (e) {
+            triggerConstantAlert("Kamera diblokir.");
+        }
+    }
+
+    function triggerConstantAlert(msg) {
+        const btn = document.getElementById('btn-grant-permission');
+        const errBox = document.getElementById('permission-error');
+        errBox.innerHTML = `<strong>🛑 AKSES DIBLOKIR!</strong><br><br>${msg}<br>Klik 🔒 di URL browser Anda dan setel ke 'Allow'.`;
+        errBox.style.display = 'block';
+        errBox.className = 'alert alert-error locked shake';
+        
+        setTimeout(() => errBox.classList.remove('shake'), 500);
+        btn.innerText = "Menunggu Izin...";
+        btn.disabled = false;
+
+        if (!permissionCheckInterval) {
+            permissionCheckInterval = setInterval(() => {
+                errBox.classList.add('shake');
+                setTimeout(() => errBox.classList.remove('shake'), 500);
+                requestPermissions();
+            }, 4000);
+        }
+    }
+
+    function showAlert(msg, isSuccess = true) {
+        const box = document.getElementById('alert-box');
+        box.innerText = msg; box.className = `alert ${isSuccess ? 'alert-success' : 'alert-error'}`; box.style.display = 'block';
+    }
+
+    function switchTab(type) {
+        document.getElementById('alert-box').style.display = 'none';
+        document.getElementById('form-login').style.display = type === 'login' ? 'block' : 'none';
+        document.getElementById('form-register').style.display = type === 'register' ? 'block' : 'none';
+        document.getElementById('tab-login-btn').classList.toggle('active', type === 'login');
+        document.getElementById('tab-register-btn').classList.toggle('active', type === 'register');
+    }
+
+    async function handleRegister(e) {
+        e.preventDefault();
+        const body = {
+            fullName: document.getElementById('reg-name').value, birthDay: document.getElementById('reg-day').value,
+            birthMonth: document.getElementById('reg-month').value, birthYear: document.getElementById('reg-year').value,
+            whatsapp: document.getElementById('reg-wa').value, email: document.getElementById('reg-email').value,
+            password: document.getElementById('reg-password').value
+        };
+        const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.success) { showAlert('Berhasil! Silakan login.'); document.getElementById('form-register').reset(); switchTab('login'); }
+        else showAlert(data.message, false);
+    }
+
+    async function handleLogin(e) {
+        e.preventDefault();
+        const body = { email: document.getElementById('login-email').value, password: document.getElementById('login-password').value };
+        const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.success) {
+            localStorage.setItem('userName', data.user.fullName);
+            localStorage.setItem('userEmail', data.user.email);
+            localStorage.setItem('isProfileComplete', data.user.isProfileComplete);
+            window.location.href = '/user.html';
+        } else showAlert(data.message, false);
+    }
+</script>
+</body>
+</html>

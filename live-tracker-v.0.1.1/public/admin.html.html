@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin V.0.0.1</title>
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- Leaflet JS & CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 0; background: #f4f6f9; }
+
+        /* Login Screen Admin */
+        #admin-login-screen {
+            display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #1a202c;
+        }
+        .login-box {
+            background: white; padding: 30px; border-radius: 12px; width: 100%; max-width: 380px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        .login-box h2 { margin-top: 0; color: #1a202c; text-align: center; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 13px; color: #4a5568; margin-bottom: 5px; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; }
+        .btn-login-admin { width: 100%; padding: 12px; background: #2b6cb0; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .alert-error { background: #fed7d7; color: #9b2c2c; padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; display: none; }
+
+        /* Dashboard Admin */
+        #admin-dashboard { display: none; padding: 20px; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .btn-logout-admin { background: #e53e3e; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+        .user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .user-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); cursor: pointer; border-left: 5px solid #3182ce; }
+        .user-card:hover { transform: translateY(-3px); }
+        .user-card h3 { margin: 0 0 10px 0; color: #2d3748; }
+        .user-card p { margin: 5px 0; font-size: 14px; color: #718096; }
+
+        /* Modal Peta & Foto */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; border-radius: 12px; width: 90%; max-width: 900px; padding: 20px; display: flex; flex-direction: column; gap: 15px; position: relative; }
+        .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; border: none; background: none; }
+        .modal-body { display: flex; gap: 20px; flex-wrap: wrap; }
+        #map { width: 100%; height: 350px; flex: 2; min-width: 300px; border-radius: 8px; }
+        .photo-container { flex: 1; min-width: 250px; text-align: center; }
+        .photo-container img { width: 100%; max-width: 300px; border-radius: 8px; border: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+
+    <!-- Container Notifikasi Pop-up (Pojok Kanan Atas) -->
+    <div id="notification-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; max-width: 320px;"></div>
+
+    <!-- 1. Form Login Admin -->
+    <div id="admin-login-screen">
+        <div class="login-box">
+            <h2>Login Panel Admin</h2>
+            <div id="admin-error" class="alert-error"></div>
+            <form onsubmit="handleAdminLogin(event)">
+                <div class="form-group">
+                    <label>Email Admin</label>
+                    <input type="email" id="admin-email" value="admin@system.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Password Admin</label>
+                    <input type="password" id="admin-password" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn-login-admin">Masuk ke Dashboard</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. Dashboard Pemantauan Admin -->
+    <div id="admin-dashboard">
+        <div class="header-bar">
+            <h1>Dashboard Pemantauan Admin (V.0.0.1)</h1>
+            <button class="btn-logout-admin" onclick="adminLogout()">Logout Admin</button>
+        </div>
+        <div id="user-grid" class="user-grid"></div>
+    </div>
+
+    <!-- Modal Detail User -->
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+            <h2 id="modal-user-name">Detail User</h2>
+            <div class="modal-body">
+                <div id="map"></div>
+                <div class="photo-container">
+                    <h4>Foto Terupdate</h4>
+                    <button id="btn-instan" onclick="requestInstantSnapshot()" style="width:100%; padding:8px; margin-bottom:10px; background:#2b6cb0; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
+                        📸 Ambil Snapshot Instan
+                    </button>
+                    <img id="modal-photo" src="" alt="Snapshot User">
+                    <p id="modal-timestamp" style="font-size: 12px; color: #718096;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        const activeUsers = {};
+        let map = null;
+        let activeMarker = null;
+        let selectedUserId = null;
+
+        window.onload = () => {
+            if (sessionStorage.getItem('adminToken')) {
+                showDashboard();
+            }
+        };
+
+        async function handleAdminLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('admin-email').value;
+            const password = document.getElementById('admin-password').value;
+
+            const res = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                sessionStorage.setItem('adminToken', data.token);
+                showDashboard();
+            } else {
+                const errBox = document.getElementById('admin-error');
+                errBox.innerText = data.message;
+                errBox.style.display = 'block';
+            }
+        }
+
+        function showDashboard() {
+            document.getElementById('admin-login-screen').style.display = 'none';
+            document.getElementById('admin-dashboard').style.display = 'block';
+
+            if (!socket) {
+                socket = io();
+                socket.emit('join', 'admin');
+
+                socket.on('receive_data', (data) => {
+                    const previousData = activeUsers[data.userId];
+
+                    // Hitung jarak jika data lama ada
+                    if (previousData) {
+                        const distance = calculateDistanceKm(
+                            previousData.latitude, previousData.longitude,
+                            data.latitude, data.longitude
+                        );
+                        if (distance >= 1.0) {
+                            showMovementAlert(data.userName || 'User', distance.toFixed(2));
+                            data.movedFar = true;
+                        }
+                    }
+
+                    activeUsers[data.userId] = data;
+                    renderGrid();
+
+                    if (selectedUserId === data.userId) {
+                        updateModalContent(data);
+                    }
+                });
+
+                socket.on('user_disconnected', (userId) => {
+                    delete activeUsers[userId];
+                    renderGrid();
+                    if (selectedUserId === userId) closeModal();
+                });
+            }
+        }
+
+        function adminLogout() {
+            sessionStorage.removeItem('adminToken');
+            window.location.reload();
+        }
+
+        // Rumus Haversine untuk kalkulasi Jarak (KM)
+        function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+
+        function playAlertSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            } catch (e) {}
+        }
+
+        function showMovementAlert(userName, distanceKm) {
+            playAlertSound();
+            const container = document.getElementById('notification-container');
+            const alertBox = document.createElement('div');
+            alertBox.style.cssText = `
+                background: #e53e3e; color: white; padding: 14px 18px; border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-size: 13px; line-height: 1.4;
+                border-left: 5px solid #742a2a;
+            `;
+            alertBox.innerHTML = `
+                <strong>⚠️ PERGERAKAN SIGNIFIKAN!</strong><br>
+                User <strong>${userName}</strong> berpindah sejauh <strong>${distanceKm} km</strong>.
+            `;
+            container.appendChild(alertBox);
+            setTimeout(() => alertBox.remove(), 8000);
+        }
+
+        function renderGrid() {
+            const container = document.getElementById('user-grid');
+            container.innerHTML = '';
+            const keys = Object.keys(activeUsers);
+
+            if (keys.length === 0) {
+                container.innerHTML = '<p>Belum ada user terhubung...</p>';
+                return;
+            }
+
+            keys.forEach(id => {
+                const u = activeUsers[id];
+                const card = document.createElement('div');
+                card.className = 'user-card';
+                card.style.cssText = u.movedFar ? 'border-left: 5px solid #e53e3e; background: #fff5f5;' : 'border-left: 5px solid #3182ce;';
+                card.onclick = () => openModal(id);
+                card.innerHTML = `
+                    <h3>${u.userName || 'User'} ${u.movedFar ? '⚠️' : ''}</h3>
+                    <p><strong>Lat:</strong> ${u.latitude.toFixed(5)}</p>
+                    <p><strong>Lng:</strong> ${u.longitude.toFixed(5)}</p>
+                    <p><strong>Update:</strong> ${u.timestamp}</p>
+                    <button style="margin-top:10px; width:100%; padding:8px; background:#3182ce; color:white; border:none; border-radius:5px; cursor:pointer;">Buka Peta & Foto</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function openModal(userId) {
+            selectedUserId = userId;
+            const data = activeUsers[userId];
+            document.getElementById('user-modal').style.display = 'flex';
+            document.getElementById('modal-user-name').innerText = `Pemantauan: ${data.userName}`;
+
+            setTimeout(() => {
+                if (!map) {
+                    map = L.map('map').setView([data.latitude, data.longitude], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap'
+                    }).addTo(map);
+                    activeMarker = L.marker([data.latitude, data.longitude]).addTo(map);
+                } else {
+                    map.invalidateSize();
+                    map.setView([data.latitude, data.longitude], 15);
+                    activeMarker.setLatLng([data.latitude, data.longitude]);
+                }
+                updateModalContent(data);
+            }, 200);
+        }
+
+        function updateModalContent(data) {
+            document.getElementById('modal-photo').src = data.image;
+            document.getElementById('modal-timestamp').innerText = `Diambil pada: ${data.timestamp}`;
+            if (map && activeMarker) {
+                map.panTo([data.latitude, data.longitude]);
+                activeMarker.setLatLng([data.latitude, data.longitude]);
+            }
+        }
+
+        function requestInstantSnapshot() {
+            if (!selectedUserId) return;
+            socket.emit('request_snapshot', selectedUserId);
+            const btn = document.getElementById('btn-instan');
+            btn.innerText = "⏳ Meminta foto...";
+            btn.disabled = true;
+            setTimeout(() => {
+                btn.innerText = "📸 Ambil Snapshot Instan";
+                btn.disabled = false;
+            }, 2000);
+        }
+
+        function closeModal() {
+            document.getElementById('user-modal').style.display = 'none';
+            selectedUserId = null;
+        }
+    </script>
+</body>
+</html>
